@@ -1,7 +1,7 @@
 baseURL = "https://kushagrasanwal.com/"
 languageCode = "en-us"
 title = "Kushagra Sanwal"
-
+paginate = 50
 
 [params]
   description = "Economics student. VC analyst. Runner."

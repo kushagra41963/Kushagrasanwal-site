@@ -1,0 +1,36 @@
+baseURL = "https://kushagrasanwal.com/"
+languageCode = "en-us"
+title = "Kushagra Sanwal"
+
+
+[params]
+  description = "Economics student. VC analyst. Runner."
+  author = "Kushagra Sanwal"
+  twitter = "kushagrasanwal"
+
+[menu]
+  [[menu.main]]
+    name = "Writing"
+    url = "/posts/"
+    weight = 1
+  [[menu.main]]
+    name = "About"
+    url = "/about/"
+    weight = 2
+  [[menu.main]]
+    name = "Now"
+    url = "/now/"
+    weight = 3
+
+[markup]
+  [markup.goldmark]
+    [markup.goldmark.renderer]
+      unsafe = true
+  [markup.highlight]
+    codeFences = true
+    guessSyntax = true
+    style = "github"
+
+[params.social]
+  twitter = "https://twitter.com/kushagrasanwal"
+  linkedin = "https://linkedin.com/in/kushagrasanwal"

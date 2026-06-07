@@ -1,5 +1,8 @@
 <header>
-  <h1><a href="/">{{ .Site.Title }}</a></h1>
+  <div class="header-top">
+    <h1><a href="/">{{ .Site.Title }}</a></h1>
+    <button id="theme-toggle" aria-label="Toggle dark mode">🌙</button>
+  </div>
   <nav class="nav-links">
     {{ range .Site.Menus.main }}
       <a href="{{ .URL }}">{{ .Name }}</a>

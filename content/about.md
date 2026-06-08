@@ -14,4 +14,4 @@ Outside work: I run. Completed the Tata Mumbai Marathon half-marathon in 2:35 an
 
 - Twitter: [@kushagra__11](https://twitter.com/kushagra__11)
 - LinkedIn: [kushagransanwal](https://linkedin.com/in/kushagransanwal)
-- Email: kush [dot] sanwal [at] leadinvest.in
+- Email: kush [dot] sanwal [at] gmail.com

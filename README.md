@@ -33,8 +33,11 @@ site depends on it. No dependencies, no external requests, no backend.
 - **Update:** edit `static/jain-surfers/index.html` on a branch and push. Cloudflare Pages builds a
   preview for the branch; check `/jain-surfers/` there, then merge to `main`. Gameplay numbers are in
   the `tuning` block near the top of the script.
+- **Mum:** a visual-only chaser (`M`, `stepMum`, `drawMum`, `drawMumLayer`). She has no hitbox and changes no
+  rules: chase intro at the start, occasional glimpses at the bottom edge, a catch-up when a shield absorbs a
+  hit, and a short catch animation before the game-over screen.
 - **Test:** `pip install playwright`, then `CHROME=/path/to/chrome python3 tests/jain-surfers/run.py`
-  (28 headless checks; screenshots go to `tests/jain-surfers/shots/`).
+  (55 headless checks; screenshots go to `tests/jain-surfers/shots/`).
 - **Roll back:** in Cloudflare Pages > Deployments, choose the previous production deployment >
   "Rollback to this deployment"; or revert the merge commit on `main`.
 - **Remove:** delete `static/jain-surfers/` and `tests/jain-surfers/`.

@@ -111,12 +111,14 @@ with sync_playwright() as pw:
       // shield absorbs one hit, chai is invincible
       r.shield=run(z=>{if(z>5)P.shield=true},'tall'); r.shieldGone=!P.shield;
       r.chai=run(z=>{P.chai=3},'tall');
+      r.chaiEnd=run(z=>{if(z>0.6)P.chai=0.001},'tall');
       return r}''')
     ok('low obstacle: hit if ignored, cleared by jump', col['lowHit']=='dying' and col['lowJump']=='play', str(col))
     ok('cart: hit if ignored or jumped, cleared by lane change', col['tallHit']=='dying' and col['tallJump']=='dying' and col['tallDodge']=='play')
     ok('banner: hit if ignored or jumped, cleared by slide', col['banHit']=='dying' and col['banJump']=='dying' and col['banSlide']=='play')
     ok('shield absorbs exactly one hit', col['shield']=='play' and col['shieldGone'])
     ok('chai boost is invincible', col['chai']=='play')
+    ok('chai boost running out next to an obstacle is not an instant loss', col['chaiEnd']=='play')
     # coins, magnet, scoring
     sc=pg.evaluate('''()=>{const J=__jainSurfers,{G,P,obs,coins,pows}=J;J.start();for(const o of obs)o.on=false;for(const c of coins)c.on=false;G.lastRowD=1e9;
       for(let i=0;i<5;i++){const c=coins[i];Object.assign(c,{on:true,x:1,y:.45,d:G.dist+6+i,ph:0})}

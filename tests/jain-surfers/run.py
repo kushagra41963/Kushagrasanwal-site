@@ -49,6 +49,34 @@ with sync_playwright() as pw:
     swipe(80,0); pg.wait_for_timeout(60); ok('swipe right -> lane 1', st()['lane']==1)
     swipe(0,-80); pg.wait_for_timeout(120); ok('swipe up -> jump', st()['y']>0.1)
     pg.wait_for_timeout(700); swipe(0,80); pg.wait_for_timeout(60); ok('swipe down -> slide', st()['slide']>0)
+    # one lane change per gesture: short and long swipes, both directions, from every lane
+    def swipe_n(dx,steps):
+        x,y=195,500
+        cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':x,'y':y}]})
+        for i in range(1,steps+1): cdp.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':x+dx*i/steps,'y':y+(3 if i%2 else -3)}]})
+        cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]})
+    bad=[]
+    for lane in (0,1,2):
+        for dx,steps,label in ((-45,3,'short left'),(45,3,'short right'),(-170,12,'long left'),(170,12,'long right'),(-185,40,'slow long left'),(185,40,'slow long right')):
+            pg.evaluate("(l)=>{const J=__jainSurfers;if(J.G.mode!=='play')J.start();J.G.lastRowD=1e9;for(const o of J.obs)o.on=false;J.P.lane=l;J.P.x=l-1;}",lane)
+            swipe_n(dx,steps); pg.wait_for_timeout(40)
+            got=st()['lane']; want=max(0,min(2,lane+(1 if dx>0 else -1)))
+            if got!=want: bad.append((lane,label,got,want))
+    ok('swipe matrix: exactly one lane change per gesture (18 cases)', not bad, str(bad))
+    # lock resets on lift: two separate swipes move two lanes; pointercancel also resets
+    pg.evaluate("()=>{const J=__jainSurfers;J.P.lane=0;J.P.x=-1}"); swipe_n(170,12); swipe_n(60,4); pg.wait_for_timeout(40)
+    ok('lock resets on pointerup: two swipes = two lanes', st()['lane']==2)
+    pg.evaluate("()=>{const J=__jainSurfers;J.P.lane=0;J.P.x=-1}")
+    cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':195,'y':500}]}); cdp.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':260,'y':500}]}); cdp.send('Input.dispatchTouchEvent',{'type':'touchCancel','touchPoints':[]})
+    swipe_n(60,4); pg.wait_for_timeout(40)
+    ok('lock resets on pointercancel', st()['lane']==2, str(st()['lane']))
+    # one gesture: sideways then up still jumps, and a long vertical swipe is one jump
+    pg.evaluate("()=>{const J=__jainSurfers;J.P.lane=1;J.P.x=0;J.P.y=0;J.P.vy=0;J.P.slide=0}")
+    cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':195,'y':500}]})
+    for pt in ((240,500),(300,500),(300,450),(300,400)): cdp.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':pt[0],'y':pt[1]}]})
+    cdp.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]}); pg.wait_for_timeout(80)
+    ok('sideways-then-up in one gesture: one lane change plus a jump', st()['lane']==2 and st()['y']>0.05, str(st()))
+    pg.wait_for_timeout(700)
     ok('page did not scroll', pg.evaluate("()=>window.scrollY===0 && document.documentElement.scrollTop===0"))
     # pause button, blur, visibility
     pg.tap('#bPause'); pg.wait_for_timeout(100); d0=st()['dist']; pg.wait_for_timeout(400)
@@ -131,6 +159,13 @@ with sync_playwright() as pw:
     pg.evaluate("()=>__jainSurfers.start()"); pg.evaluate(stage,{'dist':300,'jump':True,'pw':True})
     pg.evaluate("()=>{document.getElementById('ovPause').classList.remove('on')}"); pg.wait_for_timeout(100); pg.screenshot(path=SHOTS+'/06-play-mobile-jump.png')
     pg.evaluate(stage,{'dist':300,'slide':True}); pg.evaluate("()=>{document.getElementById('ovPause').classList.remove('on')}"); pg.wait_for_timeout(100); pg.screenshot(path=SHOTS+'/07-play-mobile-slide.png')
+    far='''()=>{const J=__jainSurfers,{G,obs,coins,pows}=J;J.start();G.dist=300;G.lastRowD=1e9;J.advance(1/60);for(const x of obs)x.on=false;for(const c of coins)c.on=false;for(const p of pows)p.on=false;
+      const add=(i,cls,kind,x,z,hw)=>Object.assign(obs[i],{on:true,fly:false,y:0,t:0,x,d:G.dist+z,hw,cls,kind,txt:cls==='wide'?'ALOO BONANZA TODAY':'PYAAZ',v:i%4,spin:1});
+      add(0,'low','onion',-1,14,.36);add(1,'tall','cart',1,16,.42);add(2,'low','sack',0,20,.36);add(3,'tall','crate',-1,26,.42);add(4,'low','garlic',1,24,.36);add(5,'ban','banner',0,30,.48);add(6,'low','onion',0,36,.36);add(7,'tall','cart',-1,40,.42);add(8,'low','garlic',1,34,.36);add(9,'wide','banner',0,48,1.55);
+      G.mode='pause';J.render();document.getElementById('ovPause').classList.remove('on')}'''
+    p2.evaluate(far); p2.wait_for_timeout(100); p2.screenshot(path=SHOTS+'/08-far-desktop.png')
+    pg.evaluate(far); pg.wait_for_timeout(100); pg.screenshot(path=SHOTS+'/09-far-mobile.png')
+    pg.evaluate("()=>__jainSurfers.start()")
     # storage blocked -> in-memory fallback
     c3=b.new_context(viewport={'width':390,'height':700}); c3.add_init_script("Object.defineProperty(window,'localStorage',{get(){throw new Error('blocked')}})")
     p3=c3.new_page(); e3=[]; p3.on('pageerror',lambda e:e3.append(str(e))); p3.goto(URL); p3.wait_for_timeout(300)

@@ -55,7 +55,8 @@
   .ctrl b{color:var(--gold);display:block;font-size:11px;letter-spacing:1px}
   .fine{margin:12px 0 0;font-size:11.5px;opacity:.7;line-height:1.4}
   .fine a{color:inherit}
-  .quip{margin:4px 0 14px;font-size:16px;line-height:1.35;font-style:italic}
+  .mum{margin:2px 0 6px;font-size:17px;line-height:1.3;font-weight:800}
+  .quip{margin:0 0 14px;font-size:14px;line-height:1.35;font-style:italic;opacity:.85}
   .res{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
   .res div{background:rgba(0,0,0,.25);border-radius:12px;padding:9px 6px;font-size:11px;font-weight:800;letter-spacing:1px;opacity:.95}
   .res strong{display:block;font-size:22px;color:var(--gold);letter-spacing:0;font-variant-numeric:tabular-nums}
@@ -64,7 +65,7 @@
   @media (max-height:520px){
     .card{padding:12px 16px;width:min(620px,100%)} h1{font-size:34px} .tag{margin:8px 0;font-size:13px}
     .ctrl{grid-template-columns:repeat(4,1fr);margin:8px 0 2px} .big{padding:10px;font-size:20px} .fine{display:none}
-    .res{grid-template-columns:repeat(4,1fr);margin-bottom:10px} .quip{margin:2px 0 8px;font-size:14px} .best{margin-bottom:8px}
+    .res{grid-template-columns:repeat(4,1fr);margin-bottom:10px} .quip{margin:0 0 8px;font-size:13px} .mum{font-size:15px;margin:0 0 3px} .best{margin-bottom:8px}
   }
 </style>
 </head>
@@ -118,6 +119,7 @@
   <div class="ov" id="ovOver">
     <div class="card">
       <h2 id="oTitle">Caught!</h2>
+      <p class="mum">Mummy caught you. Sabzi shopping continues.</p>
       <p class="quip" id="oQuip"></p>
       <p class="newbest" id="oNew">NEW BEST</p>
       <div class="res">
@@ -163,6 +165,26 @@ const G = { mode: 'menu', dist: 0, speed: SPEED0, coins: 0, score: 0, time: 0, b
   lastRowD: 0, rowN: 0, safe: 1, nextPowD: 0, shake: 0, dieT: 0, killer: '', rows: [], flash: 0 };
 const P = { lane: 1, x: 0, y: 0, vy: 0, slide: 0, runPh: 0, grace: 0, jumpBuf: 0, slideQ: false, fast: false,
   lean: 0, magnet: 0, chai: 0, shield: false };
+
+// Mum: a purely visual chaser. No hitbox, no lives, no effect on scoring or collisions.
+const M = { mode: 'idle', t: 0, r: 0, side: -1, off: -1.4, next: 10, ph: 0, vis: false, said: false, x0: 0, y0: 0, x1: 0, y1: 0 };
+function resetMum() { M.mode = 'idle'; M.t = 0; M.r = 0; M.side = -1; M.off = -1.4; M.next = rnd(8, 12); M.ph = 0; M.vis = false; M.said = false; }
+function mumEvent(m) { M.mode = m; M.t = 0; }
+function stepMum(dt) {
+  M.t += dt;
+  if (M.mode === 'catch') { if (!M.said && M.t > 0.6) { M.said = true; sfx.caught(); } return; }
+  M.ph += dt * 9;
+  // she only switches sides while out of view, so she never crosses behind the runner
+  if (M.r < 0.04 && M.mode !== 'intro') { if (P.lane === 0) M.side = 1; else if (P.lane === 2) M.side = -1; }
+  const want = M.side * (M.mode === 'intro' ? 1.4 : 0.95);
+  M.off += (want - M.off) * (1 - Math.exp(-dt * 5));
+  let target = 0;
+  if (M.mode === 'intro') { if (M.t > 1.9) { M.mode = 'idle'; M.next = rnd(8, 12); } }
+  else if (M.mode === 'catchup') { target = M.t < 1.0 ? 1 : 0; if (M.t > 1.7) { M.mode = 'idle'; M.next = rnd(8, 13); } }
+  else if (M.mode === 'glimpse') { target = M.t < 1.8 ? 0.62 : 0; if (M.t > 2.6) { M.mode = 'idle'; M.next = rnd(9, 16); } }
+  else { M.next -= dt; if (M.next <= 0) mumEvent('glimpse'); }
+  M.r += (target - M.r) * (1 - Math.exp(-dt * (target > M.r ? 9 : 4.5)));
+}
 
 const mkPool = (n, f) => Array.from({ length: n }, f);
 const obs = mkPool(48, () => ({ on: false, kind: '', cls: '', x: 0, d: 0, hw: 0, spin: 0, v: 0, fly: false, vx: 0, vy: 0, y: 0, t: 0, txt: '' }));
@@ -269,7 +291,8 @@ const sfx = {
   pow() { if (!A.ctx) return; const t = A.ctx.currentTime; [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.14, 'triangle', 0.22, 0, t + i * 0.07)); },
   pop() { tone(700, 0.2, 'sine', 0.3, 180); hiss(0.15, 0.2, 2500); },
   bonk() { tone(160, 0.12, 'square', 0.18, 90); },
-  hit() { tone(240, 0.5, 'sawtooth', 0.3, 50); hiss(0.3, 0.3, 500); }
+  hit() { tone(240, 0.5, 'sawtooth', 0.3, 50); hiss(0.3, 0.3, 500); },
+  caught() { if (!A.ctx) return; const t = A.ctx.currentTime; tone(523, 0.16, 'triangle', 0.2, 0, t); tone(392, 0.26, 'triangle', 0.2, 0, t + 0.15); }
 };
 const BASS = [0, 0, 7, 0, 5, 0, 7, 10, 0, 0, 7, 0, 3, 5, 7, 12];
 function beat() {
@@ -365,11 +388,11 @@ function reset() {
   G.nextPowD = 150; G.shake = 0; G.dieT = 0; G.killer = ''; G.rows.length = 0; G.flash = 0;
   P.lane = 1; P.x = 0; P.y = 0; P.vy = 0; P.slide = 0; P.grace = 0; P.jumpBuf = 0; P.slideQ = false; P.fast = false;
   P.magnet = 0; P.chai = 0; P.shield = false; camX = 0;
-  clearPool(obs); clearPool(coins); clearPool(pows); clearPool(parts);
+  clearPool(obs); clearPool(coins); clearPool(pows); clearPool(parts); resetMum();
 }
 function show(id) { ['ovStart', 'ovPause', 'ovOver'].forEach(o => $(o).classList.toggle('on', o === id)); }
 function start() {
-  initAudio(); reset(); G.mode = 'play'; show(''); $('hud').classList.add('on'); hudT = 0; updateHud(true); last = 0;
+  initAudio(); reset(); mumEvent('intro'); G.mode = 'play'; show(''); $('hud').classList.add('on'); hudT = 0; updateHud(true); last = 0;
 }
 function pause() {
   if (G.mode !== 'play') return;
@@ -480,9 +503,10 @@ function step(dt) {
 
   if (G.mode === 'menu') { G.dist += 5 * dt; camX += (0 - camX) * 0.1; return; }
   if (G.mode === 'dying') {
-    G.dieT += dt; G.speed *= Math.pow(0.02, dt); G.dist += G.speed * dt;
+    G.dieT += dt; G.speed = 0;
+    P.y = Math.max(0, P.y - dt * 4); P.slide = 0; P.lean *= Math.pow(0.01, dt); stepMum(dt);
     for (let i = 0; i < obs.length; i++) { const o = obs[i]; if (o.on && o.fly) flyOb(o, dt); }
-    if (G.dieT > 0.9) gameOver();
+    if (G.dieT > 1.35) gameOver();
     return;
   }
   if (G.mode !== 'play') return;
@@ -508,6 +532,7 @@ function step(dt) {
   if (P.magnet > 0) P.magnet -= dt;
   if (P.chai > 0) { P.chai -= dt; if (P.chai <= 0) P.grace = Math.max(P.grace, 0.8); }   // never drop invincibility while inside an obstacle
   const ducked = P.slide > 0 && P.y <= 0;
+  stepMum(dt);
 
   while (G.lastRowD < G.dist + ZFAR) genRow();
 
@@ -527,8 +552,8 @@ function step(dt) {
     if (!hit || P.grace > 0) continue;
     pj(o.x, 0.6, z);
     if (P.chai > 0) { knock(o); burst(PX, PY, 8, '#ffd166', 260); sfx.bonk(); G.shake = 0.25; continue; }
-    if (P.shield) { P.shield = false; P.grace = 1.3; knock(o); burst(PX, PY, 16, '#59c3ff', 320); sfx.pop(); G.shake = 0.5; continue; }
-    G.killer = o.kind; G.mode = 'dying'; G.dieT = 0; G.shake = 1; G.flash = 1; sfx.hit(); burst(PX, PY, 14, '#fff4df', 300);
+    if (P.shield) { P.shield = false; P.grace = 1.3; mumEvent('catchup'); knock(o); burst(PX, PY, 16, '#59c3ff', 320); sfx.pop(); G.shake = 0.5; continue; }
+    G.killer = o.kind; G.mode = 'dying'; G.dieT = 0; M.side = P.lane === 0 ? 1 : P.lane === 2 ? -1 : M.side; M.said = false; mumEvent('catch'); o.fly = true; o.t = 0; o.vx = -M.side * 3.2; o.vy = 3.5; G.shake = 1; G.flash = 1; sfx.hit(); burst(PX, PY, 14, '#fff4df', 300);
     return;
   }
 
@@ -661,7 +686,7 @@ function drawScenery(z, idx) {
     pj(s * 2.75, 0, z);
     if (h % 5 === 4) drawCrates(PX, PY, U * PS, h >>> 3); else drawStall(PX, PY, U * PS, h >>> 3);
   }
-  if (idx % 3 === 0) drawBunting(z, idx);
+  if (idx % 3 === 0 && z > 0.6) drawBunting(z, idx);        // never strung across in front of the runner
   ctx.globalAlpha = 1;
 }
 
@@ -772,6 +797,7 @@ function drawOb(o, z) {
   }
   ctx.save(); ctx.translate(gx, gy - o.y * u);
   if (!o.fly) silhouette(o, u);
+  if (!o.fly && M.mode === 'catch' && z < 2.5) ctx.globalAlpha *= clamp(1 - M.t * 3.5, 0, 1);
   if (o.fly) { ctx.translate(0, -0.4 * u); ctx.rotate(o.spin); ctx.translate(0, 0.4 * u); ctx.globalAlpha *= clamp(1.4 - o.t * 1.3, 0, 1); }
   switch (o.kind) {
     case 'onion': drawOnion(u, o.fly ? 0 : o.spin); break;
@@ -821,8 +847,8 @@ function drawGirl() {
   pj(P.x, 0, 0); const u = U, gx = PX, gy = PY;
   shadow(gx, gy, u, 0.32 * (1 - Math.min(P.y, 1.2) * 0.4), 0.35);
   if (P.grace > 0 && ((P.grace * 12) | 0) & 1) return;
-  const dying = G.mode === 'dying', air = P.y > 0.02 || dying, sl = P.slide > 0 && !air;
-  const ph = P.runPh, sw = Math.sin(ph), cw = Math.cos(ph);
+  const dying = M.mode === 'catch', caught = dying && M.t > 0.5, air = P.y > 0.02 || (dying && !caught), sl = P.slide > 0 && !air;
+  const ph = P.runPh, sw = caught ? 0 : Math.sin(ph), cw = caught ? 0 : Math.cos(ph);
   ctx.save(); ctx.translate(gx, gy - P.y * u); ctx.rotate(P.lean * 0.2);
   if (P.chai > 0) { ctx.fillStyle = 'rgba(255,209,102,' + (0.22 + 0.1 * Math.sin(G.time * 14)) + ')'; ctx.beginPath(); ctx.ellipse(0, -0.75 * u, 0.62 * u, 0.95 * u, 0, 0, 7); ctx.fill(); }
   if (sl) ctx.scale(1.14, 0.56);
@@ -857,7 +883,8 @@ function drawGirl() {
   for (let s = -1; s <= 1; s += 2) {
     const a = s * cw * 0.14;
     let ex, ey, hx, hy;
-    if (air) { ex = s * 0.36; ey = -1.24; hx = s * 0.44; hy = dying ? -1.55 : -1.46; }
+    if (caught && s === M.side) { ex = s * 0.29; ey = -0.96; hx = s * 0.36; hy = -0.74; }      // hand held by mum
+    else if (air) { ex = s * 0.36; ey = -1.24; hx = s * 0.44; hy = dying ? -1.55 : -1.46; }
     else { ex = s * 0.3; ey = -0.94 + a; hx = s * 0.27; hy = -0.74 + a * 2; }
     ctx.strokeStyle = '#e83e6c'; ctx.lineWidth = 0.1 * u; ctx.beginPath(); ctx.moveTo(s * 0.2 * u, -1.14 * u); ctx.lineTo(ex * u, ey * u); ctx.stroke();
     ctx.strokeStyle = '#c98a5e'; ctx.lineWidth = 0.075 * u; ctx.beginPath(); ctx.moveTo(ex * u, ey * u); ctx.lineTo(hx * u, hy * u); ctx.stroke();
@@ -885,12 +912,92 @@ function drawGirl() {
     const rr = (0.5 + (G.time * 1.6 % 1) * 0.5) * u;
     ctx.globalAlpha = 1 - (G.time * 1.6 % 1); ctx.beginPath(); ctx.ellipse(gx, gy - P.y * u - 0.7 * u, rr, rr * 1.2, 0, 0, 7); ctx.stroke(); ctx.globalAlpha = 1;
   }
-  if (dying && G.dieT > 0.12) {
-    const bx = gx + 0.55 * u, by = gy - 1.7 * u, bw = 1.25 * u, bh = 0.5 * u;
-    ctx.fillStyle = '#fff4df'; ctx.beginPath(); ctx.ellipse(bx, by, bw / 2, bh / 2, 0, 0, 7); ctx.fill();
-    ctx.beginPath(); ctx.moveTo(bx - 0.3 * u, by + 0.18 * u); ctx.lineTo(gx + 0.2 * u, gy - 1.3 * u); ctx.lineTo(bx - 0.05 * u, by + 0.22 * u); ctx.fill();
-    ctx.fillStyle = '#2b1630'; ctx.font = '900 ' + 0.25 * u + 'px "Trebuchet MS",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('NAHIII!', bx, by + 0.01 * u);
+  if (dying && M.t > 0.12 && M.t < 0.7) bubble(gx - M.side * 0.6 * u, gy - 1.72 * u, 'NAHIII!', gx - M.side * 0.2 * u, gy - 1.3 * u, u);
+}
+function bubble(bx, by, txt, tx2, ty2, u) {
+  const bw = 0.2 * u * (txt.length * 0.62 + 1.2), bh = 0.5 * u;
+  bx = clamp(bx, bw / 2 + 6, W - bw / 2 - 6); by = Math.max(by, bh / 2 + 6);
+  ctx.fillStyle = '#fff4df'; ctx.beginPath(); ctx.ellipse(bx, by, bw / 2, bh / 2, 0, 0, 7); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(bx - 0.12 * u, by + 0.18 * u); ctx.lineTo(tx2, ty2); ctx.lineTo(bx + 0.12 * u, by + 0.2 * u); ctx.fill();
+  ctx.fillStyle = '#2b1630'; ctx.font = '900 ' + 0.24 * u + 'px "Trebuchet MS",sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(txt, bx, by + 0.01 * u);
+}
+
+/* Mum, seen from behind: indigo kameez, peach salwar, marigold dupatta, low bun with gajra, jute shopping bag. */
+function drawMum(x, fy, u, moving, reach, hold, hx, hy) {
+  const ph = M.ph, sw = moving ? Math.sin(ph) : 0, cw = moving ? Math.cos(ph) : 0, inn = -M.side, out = M.side;
+  ctx.save(); ctx.translate(x, fy - (moving ? Math.abs(sw) * 0.04 * u : 0)); ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  // dupatta tail, hanging from the shoulder nearer the girl
+  ctx.strokeStyle = '#f6b93b'; ctx.lineWidth = 0.13 * u; ctx.beginPath(); ctx.moveTo(inn * 0.2 * u, -1.3 * u);
+  for (let i = 1; i <= 5; i++) { const t = i / 5; ctx.lineTo((inn * (0.22 + 0.06 * t) + Math.sin(ph * 1.2 + t * 4) * 0.04 * t * (moving ? 1 : 0.3)) * u, (-1.3 + t * 0.72) * u); }
+  ctx.stroke();
+  // salwar: loose legs gathered at the ankle
+  for (let s = -1; s <= 1; s += 2) {
+    const lift = Math.max(0, s * sw) * 0.16, ay = (-0.09 - lift) * u;
+    ctx.fillStyle = '#f6d2b0'; ctx.beginPath(); ctx.moveTo(-s * 0.02 * u, -0.66 * u); ctx.quadraticCurveTo(s * 0.4 * u, -0.5 * u, s * 0.21 * u, ay);
+    ctx.lineTo(s * 0.06 * u, ay); ctx.quadraticCurveTo(s * 0.0 * u, -0.4 * u, -s * 0.02 * u, -0.66 * u); ctx.fill();
+    ctx.fillStyle = '#ffd166'; ctx.fillRect(Math.min(s * 0.06, s * 0.21) * u, ay - 0.035 * u, 0.15 * u, 0.045 * u);
+    ctx.fillStyle = '#7a3b2e'; ctx.beginPath(); ctx.ellipse(s * 0.135 * u, ay + 0.045 * u, 0.095 * u, 0.05 * u, 0, 0, 7); ctx.fill();
   }
+  // kameez
+  const sway = cw * 0.025 * u;
+  ctx.fillStyle = '#3d4db0'; ctx.beginPath(); ctx.moveTo(-0.25 * u, -1.32 * u); ctx.lineTo(0.25 * u, -1.32 * u);
+  ctx.quadraticCurveTo(0.29 * u, -0.8 * u, 0.36 * u + sway, -0.36 * u); ctx.lineTo(-0.36 * u + sway, -0.36 * u); ctx.quadraticCurveTo(-0.29 * u, -0.8 * u, -0.25 * u, -1.32 * u); ctx.fill();
+  ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 0.05 * u; ctx.beginPath(); ctx.moveTo(-0.34 * u + sway, -0.39 * u); ctx.lineTo(0.34 * u + sway, -0.39 * u); ctx.stroke();
+  ctx.strokeStyle = '#2f3b8e'; ctx.lineWidth = 0.02 * u; ctx.beginPath(); ctx.moveTo(0, -1.26 * u); ctx.lineTo(sway, -0.43 * u); ctx.stroke();
+  // dupatta draped across the back
+  ctx.strokeStyle = '#f6b93b'; ctx.lineWidth = 0.14 * u; ctx.beginPath(); ctx.moveTo(inn * 0.22 * u, -1.3 * u); ctx.quadraticCurveTo(0, -1.0 * u, out * 0.3 * u, -0.74 * u); ctx.stroke();
+  ctx.strokeStyle = '#e63946'; ctx.lineWidth = 0.022 * u; ctx.beginPath(); ctx.moveTo(inn * 0.22 * u, -1.24 * u); ctx.quadraticCurveTo(0, -0.94 * u, out * 0.3 * u, -0.68 * u); ctx.stroke();
+  // outer arm carries the shopping bag
+  const a = cw * 0.09, ohx = out * 0.37 * u, ohy = (-0.72 + a) * u;
+  ctx.strokeStyle = '#3d4db0'; ctx.lineWidth = 0.115 * u; ctx.beginPath(); ctx.moveTo(out * 0.25 * u, -1.26 * u); ctx.lineTo(out * 0.36 * u, (-0.99 + a * 0.5) * u); ctx.stroke();
+  ctx.strokeStyle = '#c98a5e'; ctx.lineWidth = 0.08 * u; ctx.beginPath(); ctx.moveTo(out * 0.36 * u, (-0.99 + a * 0.5) * u); ctx.lineTo(ohx, ohy); ctx.stroke();
+  ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 0.03 * u; ctx.beginPath(); ctx.moveTo(ohx - 0.05 * u, ohy - 0.07 * u); ctx.lineTo(ohx + 0.05 * u, ohy - 0.07 * u); ctx.moveTo(ohx - 0.05 * u, ohy - 0.12 * u); ctx.lineTo(ohx + 0.05 * u, ohy - 0.12 * u); ctx.stroke();
+  ctx.save(); ctx.translate(ohx, ohy); ctx.rotate(sw * 0.16 + out * 0.04);
+  ctx.strokeStyle = '#8a6a34'; ctx.lineWidth = 0.03 * u; ctx.beginPath(); ctx.moveTo(-0.12 * u, 0.2 * u); ctx.lineTo(0, 0); ctx.lineTo(0.12 * u, 0.2 * u); ctx.stroke();
+  ctx.fillStyle = '#4c9a3a'; for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.ellipse(i * 0.09 * u, 0.15 * u, 0.06 * u, 0.1 * u, i * 0.4, 0, 7); ctx.fill(); }
+  ctx.fillStyle = '#d4ae68'; ctx.beginPath(); ctx.moveTo(-0.19 * u, 0.19 * u); ctx.lineTo(0.19 * u, 0.19 * u); ctx.lineTo(0.16 * u, 0.56 * u); ctx.lineTo(-0.16 * u, 0.56 * u); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#e63946'; ctx.fillRect(-0.18 * u, 0.3 * u, 0.36 * u, 0.06 * u); ctx.fillStyle = '#19b5a5'; ctx.fillRect(-0.17 * u, 0.4 * u, 0.34 * u, 0.035 * u);
+  ctx.restore();
+  // inner arm: swings, reaches out when she nearly catches up, or holds the girl's hand
+  let ex, ey, ix, iy;
+  if (hold > 0) { ix = hx; iy = hy; ex = (inn * 0.25 * u + ix) / 2 + inn * 0.05 * u; ey = (-1.26 * u + iy) / 2 + 0.06 * u; }
+  else if (reach > 0.02) { ex = inn * (0.3 + 0.04 * reach) * u; ey = (-0.99 - 0.2 * reach) * u; ix = inn * (0.3 + 0.1 * reach) * u; iy = (-0.74 - 0.72 * reach + Math.sin(ph * 1.6) * 0.03) * u; }
+  else { ex = inn * 0.35 * u; ey = (-0.99 - a * 0.5) * u; ix = inn * 0.32 * u; iy = (-0.74 - a) * u; }
+  ctx.strokeStyle = '#3d4db0'; ctx.lineWidth = 0.115 * u; ctx.beginPath(); ctx.moveTo(inn * 0.25 * u, -1.26 * u); ctx.lineTo(ex, ey); ctx.stroke();
+  ctx.strokeStyle = '#c98a5e'; ctx.lineWidth = 0.08 * u; ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(ix, iy); ctx.stroke();
+  ctx.fillStyle = '#c98a5e'; ctx.beginPath(); ctx.arc(ix, iy, 0.05 * u, 0, 7); ctx.fill();
+  // neck, head, low bun with a gajra
+  ctx.fillStyle = '#c98a5e'; ctx.fillRect(-0.055 * u, -1.4 * u, 0.11 * u, 0.1 * u);
+  ctx.beginPath(); ctx.arc(-0.16 * u, -1.5 * u, 0.036 * u, 0, 7); ctx.arc(0.16 * u, -1.5 * u, 0.036 * u, 0, 7); ctx.fill();
+  ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.arc(-0.165 * u, -1.45 * u, 0.022 * u, 0, 7); ctx.arc(0.165 * u, -1.45 * u, 0.022 * u, 0, 7); ctx.fill();
+  ctx.fillStyle = '#2b1b17'; ctx.beginPath(); ctx.arc(0, -1.52 * u, 0.165 * u, 0, 7); ctx.fill();
+  ctx.fillStyle = '#3a2620'; ctx.beginPath(); ctx.arc(0, -1.46 * u, 0.085 * u, 0, 7); ctx.fill();
+  ctx.fillStyle = '#fff4df';
+  for (let i = 0; i < 9; i++) { const g = Math.PI * (0.08 + i * 0.105); ctx.beginPath(); ctx.arc(Math.cos(g) * 0.098 * u, -1.46 * u + Math.sin(g) * 0.098 * u, 0.021 * u, 0, 7); ctx.fill(); }
+  ctx.restore();
+}
+// Placement keeps her out of the way: during play her head never rises above the runner's
+// ground line (hazards ahead are all drawn above it) and she is offset to one side.
+function drawMumLayer() {
+  M.vis = false;
+  if (G.mode === 'menu') return;
+  pj(P.x, 0, 0); const gx = PX, gy = PY;
+  let x, fy, u, moving = true, reach = 0, hold = 0, hx = 0, hy = 0;
+  if (M.mode === 'catch') {
+    const k = clamp(M.t / 0.55, 0, 1), e = 1 - (1 - k) * (1 - k);
+    u = U * (1.5 - 0.44 * e); x = gx + M.side * U * (1.25 - 0.59 * e); fy = H + 1.9 * u + (gy - H - 1.9 * u) * e;
+    moving = k < 1; hold = clamp((M.t - 0.5) / 0.2, 0, 1);
+    hx = (gx + M.side * 0.36 * U) - x; hy = (gy - P.y * U - 0.74 * U) - fy;
+  } else {
+    u = U * 1.5; let top;
+    if (M.mode === 'intro') { const c = 1 - clamp(M.t / 1.7, 0, 1), e = c * c * (3 - 2 * c); top = H + 0.1 * U + (gndY - 0.95 * U - H - 0.1 * U) * e; }
+    else { top = H + 0.1 * U + (gndY + 0.12 * U - H - 0.1 * U) * M.r; reach = M.mode === 'catchup' ? clamp(M.r, 0, 1) : 0; }
+    if (top >= H - 2) return;
+    fy = top + 1.7 * u; x = gx + M.off * U;
+  }
+  drawMum(x, fy, u, moving, reach, hold, hx, hy);
+  M.vis = true; M.x0 = x - (M.side > 0 ? 0.46 : 0.62) * u; M.x1 = x + (M.side > 0 ? 0.62 : 0.46) * u; M.y0 = fy - 1.7 * u; M.y1 = fy + 0.1 * u;
+  if (M.mode === 'catch' && M.t > 0.75) bubble(x + M.side * 0.5 * u, fy - 1.98 * u, 'Chalo, beta.', x + M.side * 0.1 * u, fy - 1.62 * u, u);
 }
 
 const dl = [];
@@ -924,6 +1031,7 @@ function render() {
     upTo(zs); drawScenery(zs, base + k);
   }
   upTo(-99);
+  drawMumLayer();
 
   for (let i = 0; i < parts.length; i++) {
     const p = parts[i]; if (!p.on) continue;
@@ -952,7 +1060,8 @@ resize();
 requestAnimationFrame(frame);
 
 // small hook used by the automated checks in README; not needed for play
-window.__jainSurfers = { G, P, obs, coins, pows, act, start, pause, resume, advance, render, store };
+window.__jainSurfers = { G, P, M, obs, coins, pows, act, start, pause, resume, advance, render, store,
+  view: () => { pj(P.x, 0, 0); return { W, H, U, gndY, girl: { x0: PX - 0.6 * U, x1: PX + 0.6 * U, y0: PY - P.y * U - 1.75 * U, y1: PY + 0.1 * U } }; } };
 })();
 </script>
 </body>

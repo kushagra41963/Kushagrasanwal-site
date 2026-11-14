@@ -132,7 +132,7 @@ with sync_playwright() as pw:
     ok('40 restarts leave clean state', rs==0)
     # game over screen + best saved across reload
     pg.evaluate("()=>{const J=__jainSurfers;J.start();J.G.dist=1234;J.G.lastRowD=1e9;J.G.coins=7;J.advance(1/60);const o=J.obs[0];Object.assign(o,{on:true,fly:false,y:0,x:0,d:J.G.dist+1,hw:.4,cls:'tall',kind:'cart',v:0});}")
-    pg.wait_for_timeout(1800)
+    pg.wait_for_timeout(2300)
     ok('game over screen shows results', pg.is_visible('#ovOver') and pg.inner_text('#oCoins')=='7' and len(pg.inner_text('#oQuip'))>5, pg.inner_text('#oQuip')+' | '+pg.inner_text('#oScore'))
     pg.screenshot(path=SHOTS+'/05-gameover.png')
     best=int(pg.inner_text('#oBest')); pg.reload(); pg.wait_for_timeout(400)
@@ -168,6 +168,73 @@ with sync_playwright() as pw:
     p2.evaluate(far); p2.wait_for_timeout(100); p2.screenshot(path=SHOTS+'/08-far-desktop.png')
     pg.evaluate(far); pg.wait_for_timeout(100); pg.screenshot(path=SHOTS+'/09-far-mobile.png')
     pg.evaluate("()=>__jainSurfers.start()")
+    # ---- mum chaser: visual only, never overlaps the runner, HUD or the hazard area ----
+    MUM = """async (shotMode)=>{const J=__jainSurfers,{G,P,M,obs,coins}=J;const r={};
+      const hud=()=>{let b=0;for(const id of ['hScore','hDist','bPause','bMute','pwMagnet','pwShield','pwChai']){const e=document.getElementById(id).getBoundingClientRect();if(e.height)b=Math.max(b,e.bottom)}return b};
+      const hit=(a,b)=>a.x0<b.x1&&a.x1>b.x0&&a.y0<b.y1&&a.y1>b.y0;
+      const clear=()=>{for(const o of obs)o.on=false;for(const c of coins)c.on=false;G.lastRowD=1e9};
+      const watch=(secs,label,needBelowGround)=>{let seen=0,bad=[];for(let i=0;i<secs*60&&G.mode==='play';i++){J.advance(1/60);J.render();if(!M.vis)continue;seen++;const v=J.view();
+          if(hit(M,v.girl))bad.push(label+' overlaps runner t='+M.t.toFixed(2));if(M.y0<hud()&&M.x0<v.W&&M.x1>0)bad.push(label+' overlaps HUD');
+          if(needBelowGround&&M.y0<v.gndY)bad.push(label+' rises into hazard area');
+          // also while the runner jumps, slides and changes lane
+          if(i%37===5)J.act('up');if(i%53===9)J.act('down');if(i%41===3)J.act(i%2?'left':'right');}
+        return {seen,bad:bad.slice(0,3)}};
+      // 1 start intro
+      J.start();clear();J.advance(1/60);J.render();r.introMode=M.mode;r.introVisible=M.vis;
+      if(shotMode==='intro'){J.advance(0.25);J.render();G.mode='pause';return r}
+      r.intro=watch(2.4,'intro',false);r.introGone=!M.vis&&M.mode==='idle';
+      // 2 glimpse
+      M.next=0;J.advance(1/60);r.glimpseMode=M.mode;
+      if(shotMode==='glimpse'){J.advance(0.9);J.render();G.mode='pause';return r}
+      r.glimpse=watch(3.2,'glimpse',true);r.glimpseGone=!M.vis;
+      // 3 shield absorbs a hit -> catch-up, no other rule changes
+      clear();P.lane=1;P.x=0;P.y=0;P.slide=0;P.shield=true;const c0=G.coins;
+      Object.assign(obs[0],{on:true,fly:false,y:0,t:0,x:0,d:G.dist+1.2,hw:.42,cls:'tall',kind:'cart',v:0});
+      for(let i=0;i<30&&M.mode!=='catchup';i++)J.advance(1/60);
+      r.catchupMode=M.mode;r.stillPlaying=G.mode==='play';r.shieldUsed=!P.shield;r.coinsSame=G.coins===c0;
+      if(shotMode==='catchup'){J.advance(0.6);J.render();G.mode='pause';return r}
+      r.catchup=watch(2.6,'catchup',true);r.catchupGone=!M.vis&&M.mode==='idle';
+      // 4 pause freezes her
+      M.next=0;J.advance(0.5);J.pause();const a=[M.t,M.ph,M.r];await new Promise(q=>setTimeout(q,350));r.pauseFrozen=a[0]===M.t&&a[1]===M.ph&&a[2]===M.r;J.resume();
+      window.dispatchEvent(new Event('blur'));const b=[M.t,M.ph,M.r];await new Promise(q=>setTimeout(q,350));r.blurFrozen=G.mode==='pause'&&b[0]===M.t&&b[1]===M.ph;J.resume();
+      // 5 unprotected crash -> catch animation -> game over
+      clear();P.lane=1;P.x=0;P.y=0;P.slide=0;P.shield=false;P.grace=0;P.chai=0;
+      Object.assign(obs[0],{on:true,fly:false,y:0,t:0,x:0,d:G.dist+1.2,hw:.42,cls:'tall',kind:'cart',v:0});
+      for(let i=0;i<30&&G.mode==='play';i++)J.advance(1/60);
+      r.crashMode=G.mode;r.catchMode=M.mode;const d0=G.dist;
+      if(shotMode==='catch'){J.advance(1.0);J.render();document.getElementById('hud').classList.remove('on');G.mode='pause';return r}
+      let n=0;while(G.mode==='dying'&&n<400){J.advance(1/60);n++}
+      r.catchSecs=+(n/60).toFixed(2);r.overMode=G.mode;r.movedAfterCrash=+(G.dist-d0).toFixed(1);
+      r.line=document.querySelector('#ovOver .mum').textContent;r.overVisible=document.getElementById('ovOver').classList.contains('on');
+      // Play Again works the instant the result screen is up
+      document.getElementById('bAgain').click();r.againMode=G.mode;r.againMum=M.mode==='intro'&&M.t<0.05&&M.r===0&&!M.said;
+      // 6 repeated restarts, including mid-glimpse, mid-catch-up and mid-catch
+      let bad=0;for(let k=0;k<30;k++){J.start();clear();J.advance(0.3+k*0.11);if(k%3===0){M.next=0;J.advance(0.8)}if(k%3===1){P.shield=true;Object.assign(obs[0],{on:true,fly:false,y:0,t:0,x:P.x,d:G.dist+0.5,hw:.42,cls:'tall',kind:'cart',v:0});J.advance(0.4)}
+        if(k%3===2){Object.assign(obs[0],{on:true,fly:false,y:0,t:0,x:P.x,d:G.dist+0.5,hw:.42,cls:'tall',kind:'cart',v:0});J.advance(0.6)}
+        J.start();if(!(M.mode==='intro'&&M.t===0&&M.r===0&&M.off===-1.4&&M.side===-1&&G.mode==='play'&&G.dist===0))bad++}
+      r.restartBad=bad;J.start();clear();return r}"""
+    for name,vp,touch in (('phone portrait',{'width':390,'height':844},True),('phone landscape',{'width':844,'height':390},True),('desktop',{'width':1280,'height':720},False)):
+        cm=b.new_context(viewport=vp,device_scale_factor=2,has_touch=touch,is_mobile=touch); pm=cm.new_page(); em=[]; pm.on('pageerror',lambda e:em.append(str(e)))
+        pm.goto(URL); pm.wait_for_timeout(300); r=pm.evaluate(MUM,'')
+        tag=name.replace(' ','-')
+        ok(f'mum [{name}]: chase intro starts close, then falls out of view', r['introMode']=='intro' and r['introVisible'] and r['intro']['seen']>30 and not r['intro']['bad'] and r['introGone'], str(r['intro']))
+        ok(f'mum [{name}]: glimpse stays below the ground line, clear of runner and HUD', r['glimpseMode']=='glimpse' and r['glimpse']['seen']>30 and not r['glimpse']['bad'] and r['glimpseGone'], str(r['glimpse']))
+        ok(f'mum [{name}]: shield hit -> catch-up then falls back; run continues, nothing else changes', r['catchupMode']=='catchup' and r['stillPlaying'] and r['shieldUsed'] and r['coinsSame'] and r['catchup']['seen']>30 and not r['catchup']['bad'] and r['catchupGone'], str(r['catchup']))
+        ok(f'mum [{name}]: frozen while paused and on tab blur', r['pauseFrozen'] and r['blurFrozen'])
+        ok(f'mum [{name}]: crash -> short catch animation -> game-over line', r['crashMode']=='dying' and r['catchMode']=='catch' and r['overMode']=='over' and r['overVisible'] and 1.0<r['catchSecs']<1.6 and r['line']=='Mummy caught you. Sabzi shopping continues.' and r['movedAfterCrash']==0, f"{r['catchSecs']}s, drift {r['movedAfterCrash']} m, {r['line']}")
+        ok(f'mum [{name}]: Play Again works immediately and resets her', r['againMode']=='play' and r['againMum'])
+        ok(f'mum [{name}]: 30 restarts from every mum state reset cleanly', r['restartBad']==0 and not em, str(em))
+        for mode in ('intro','glimpse','catchup','catch'):
+            pm.evaluate("()=>__jainSurfers.start()"); pm.evaluate(MUM,mode); pm.evaluate("()=>{document.getElementById('ovPause').classList.remove('on');__jainSurfers.render()}"); pm.wait_for_timeout(60)
+            pm.screenshot(path=SHOTS+f'/mum-{tag}-{mode}.png')
+        if touch and vp['width']<vp['height']:
+            # one long swipe still moves exactly one lane with mum in the game
+            cd2=cm.new_cdp_session(pm); pm.evaluate("()=>{const J=__jainSurfers;J.start();J.G.lastRowD=1e9;J.P.lane=0;J.P.x=-1}")
+            cd2.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':80,'y':520}]})
+            for i in range(1,25): cd2.send('Input.dispatchTouchEvent',{'type':'touchMove','touchPoints':[{'x':80+i*11,'y':520}]})
+            cd2.send('Input.dispatchTouchEvent',{'type':'touchEnd','touchPoints':[]}); pm.wait_for_timeout(50)
+            ok('one long swipe (264 px) from the left lane still moves exactly one lane', pm.evaluate("()=>__jainSurfers.P.lane")==1)
+        cm.close()
     # storage blocked -> in-memory fallback
     c3=b.new_context(viewport={'width':390,'height':700}); c3.add_init_script("Object.defineProperty(window,'localStorage',{get(){throw new Error('blocked')}})")
     p3=c3.new_page(); e3=[]; p3.on('pageerror',lambda e:e3.append(str(e))); p3.goto(URL); p3.wait_for_timeout(300)

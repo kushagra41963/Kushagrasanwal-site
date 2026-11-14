@@ -12,7 +12,7 @@
   *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
   html,body{margin:0;height:100%;background:var(--plum);overflow:hidden;overscroll-behavior:none;
     font-family:"Trebuchet MS","Avenir Next","Segoe UI",system-ui,sans-serif;color:var(--cream);
-    -webkit-user-select:none;user-select:none}
+    -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
   #wrap{position:fixed;inset:0;height:100dvh}
   canvas{display:block;width:100%;height:100%;touch-action:none}
   button{font:inherit;color:inherit;cursor:pointer;border:0}
@@ -432,19 +432,24 @@ window.addEventListener('keydown', e => {
   if (k && G.mode !== 'play') e.preventDefault();                    // no page scroll from arrow keys / space on menus
   if (e.code === 'Enter') { if (G.mode === 'menu' || G.mode === 'over') start(); else if (G.mode === 'pause') resume(); }
 });
-let tId = null, tx = 0, ty = 0, tLast = '';
-cv.addEventListener('pointerdown', e => { tId = e.pointerId; tLast = ''; tx = e.clientX; ty = e.clientY; try { cv.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
+let tId = null, tx = 0, ty = 0, tLast = '', hLock = false;
+cv.addEventListener('pointerdown', e => { tId = e.pointerId; tLast = ''; hLock = false; tx = e.clientX; ty = e.clientY; try { cv.setPointerCapture(e.pointerId); } catch (_) {} e.preventDefault(); });
 cv.addEventListener('pointermove', e => {
   if (e.pointerId !== tId) return; e.preventDefault();
   const dx = e.clientX - tx, dy = e.clientY - ty, th = Math.max(22, Math.min(W, H) * 0.045);
   if (Math.abs(dx) < th && Math.abs(dy) < th) return;
-  const a = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
-  // one long swipe is one action; a repeat in the same direction needs a clearly longer drag
-  if (a === tLast && Math.max(Math.abs(dx), Math.abs(dy)) < th * 4) return;
+  if (Math.abs(dx) > Math.abs(dy)) {
+    // a gesture changes lane at most once, however long it is; the lock clears when the finger lifts
+    if (!hLock) { hLock = true; act(dx > 0 ? 'right' : 'left'); }
+    tx = e.clientX; ty = e.clientY; return;
+  }
+  const a = dy > 0 ? 'down' : 'up';
+  // a repeat of the same vertical action needs a clearly longer drag
+  if (a === tLast && Math.abs(dy) < th * 4) return;
   act(a); tLast = a;
   tx = e.clientX; ty = e.clientY;                           // re-anchor so a change of direction chains without lifting
 });
-const tEnd = e => { if (e.pointerId === tId) tId = null; };
+const tEnd = e => { if (e.pointerId === tId) { tId = null; hLock = false; tLast = ''; } };
 cv.addEventListener('pointerup', tEnd); cv.addEventListener('pointercancel', tEnd);
 cv.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
 cv.addEventListener('contextmenu', e => e.preventDefault());
@@ -501,7 +506,7 @@ function step(dt) {
   } else if (P.slide > 0) P.slide -= dt;
   if (P.grace > 0) P.grace -= dt;
   if (P.magnet > 0) P.magnet -= dt;
-  if (P.chai > 0) P.chai -= dt;
+  if (P.chai > 0) { P.chai -= dt; if (P.chai <= 0) P.grace = Math.max(P.grace, 0.8); }   // never drop invincibility while inside an obstacle
   const ducked = P.slide > 0 && P.y <= 0;
 
   while (G.lastRowD < G.dist + ZFAR) genRow();
@@ -728,10 +733,45 @@ function drawBanner(u, o) {
     else { ctx.fillText(o.txt, 0, top + 0.27 * u, hw * 1.8); ctx.fillStyle = '#ffd166'; ctx.font = '900 ' + fs * 0.8 + 'px "Trebuchet MS",sans-serif'; ctx.fillText('SALE', 0, top + 0.52 * u, hw * 1.8); }
   }
 }
+// Dark backing shape, a fixed few pixels larger than the obstacle, so the outline is
+// proportionally heavier the farther away (and smaller) the obstacle is.
+function silhouette(o, u) {
+  const p = clamp(0.045 * u, 1.3, 3.2);
+  ctx.fillStyle = '#2b1630'; ctx.beginPath();
+  switch (o.kind) {
+    case 'onion': ctx.arc(0, -0.34 * u, 0.34 * u + p, 0, 7); break;
+    case 'garlic':
+      ctx.ellipse(-0.2 * u, -0.22 * u, 0.21 * u + p, 0.26 * u + p, 0, 0, 7); ctx.ellipse(0.2 * u, -0.22 * u, 0.21 * u + p, 0.26 * u + p, 0, 0, 7);
+      ctx.moveTo(0, -0.5 * u); ctx.ellipse(0, -0.5 * u, 0.23 * u + p, 0.3 * u + p, 0, 0, 7); break;
+    case 'sack':
+      ctx.moveTo(-0.38 * u - p, p * 0.5); ctx.quadraticCurveTo(-0.5 * u - p, -0.4 * u, -0.34 * u - p, -0.78 * u - p);
+      ctx.lineTo(0.34 * u + p, -0.78 * u - p); ctx.quadraticCurveTo(0.5 * u + p, -0.4 * u, 0.38 * u + p, p * 0.5); ctx.closePath(); break;
+    case 'cart':
+      ctx.ellipse(0, -1.6 * u + p * 0.5, 0.55 * u + p, 0.34 * u + p, 0, Math.PI, 0); ctx.closePath();
+      ctx.rect(-0.03 * u - p, -1.62 * u, 0.06 * u + p * 2, 1.0 * u);
+      ctx.moveTo(0.4 * u + p, -0.78 * u); ctx.ellipse(0, -0.78 * u, 0.4 * u + p, 0.2 * u + p, 0, 0, 7);
+      ctx.rect(-0.46 * u - p, -0.66 * u - p, 0.92 * u + p * 2, 0.26 * u + p * 2);
+      ctx.moveTo(-0.34 * u, -0.22 * u); ctx.arc(-0.34 * u, -0.22 * u, 0.22 * u + p, 0, 7); ctx.moveTo(0.34 * u, -0.22 * u); ctx.arc(0.34 * u, -0.22 * u, 0.22 * u + p, 0, 7); break;
+    case 'crate':
+      ctx.rect(-0.43 * u - p, -1.5 * u - p, 0.86 * u + p * 2, 1.5 * u + p * 1.5);
+      ctx.moveTo(0.38 * u, -1.56 * u); ctx.ellipse(0, -1.56 * u, 0.38 * u + p, 0.2 * u + p, 0, 0, 7); break;
+    default: {
+      const hw = o.hw * u;
+      ctx.rect(-hw - p, -1.68 * u - p, hw * 2 + p * 2, 0.82 * u + p * 2);
+      ctx.rect(-hw - 0.03 * u - p, -1.8 * u - p, 0.06 * u + p * 2, 1.8 * u + p); ctx.rect(hw - 0.03 * u - p, -1.8 * u - p, 0.06 * u + p * 2, 1.8 * u + p);
+    }
+  }
+  ctx.fill();
+}
 function drawOb(o, z) {
   pj(o.x, 0, z); const u = U * PS, gx = PX, gy = PY;
-  if (!o.fly && o.kind !== 'banner') shadow(gx, gy, u, o.hw * 1.15, 0.3);
+  if (!o.fly) {
+    const far = clamp((z - 3) / 10, 0, 1);                    // pale patch lifts distant obstacles off the road
+    if (far > 0) { ctx.fillStyle = 'rgba(255,232,190,' + (0.3 * far) + ')'; ctx.beginPath(); ctx.ellipse(gx, gy, o.hw * 1.7 * u, o.hw * 0.5 * u, 0, 0, 7); ctx.fill(); }
+    if (o.kind !== 'banner') shadow(gx, gy, u, o.hw * 1.15, 0.42);
+  }
   ctx.save(); ctx.translate(gx, gy - o.y * u);
+  if (!o.fly) silhouette(o, u);
   if (o.fly) { ctx.translate(0, -0.4 * u); ctx.rotate(o.spin); ctx.translate(0, 0.4 * u); ctx.globalAlpha *= clamp(1.4 - o.t * 1.3, 0, 1); }
   switch (o.kind) {
     case 'onion': drawOnion(u, o.fly ? 0 : o.spin); break;
@@ -870,7 +910,7 @@ function render() {
   let di = 0, girl = false;
   const drawEnt = e => {
     const z = e.d - G.dist; if (z > ZFAR || z < -3) return;
-    ctx.globalAlpha = clamp((ZFAR - z) / 10, 0, 1);
+    ctx.globalAlpha = clamp((ZFAR - z) / (e.cls === undefined ? 10 : 5), 0, 1);
     if (e.kind === undefined) drawCoin(e, z); else if (e.cls === undefined) drawPow(e, z); else drawOb(e, z);
     ctx.globalAlpha = 1;
   };

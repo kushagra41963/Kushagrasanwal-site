@@ -3,3 +3,5 @@ resources/
 .hugo_build.lock
 .DS_Store
 node_modules/
+tests/jain-surfers/shots/
+__pycache__/
